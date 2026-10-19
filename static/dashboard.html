@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Панель управления ботом</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </div>
+        <h1 class="text-lg font-semibold text-white tracking-tight">Панель управления ботом</h1>
+      </div>
+
+      <!-- Status Badge -->
+      <div class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300">
+        <span class="relative flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+        <span id="botActiveStatus">Бот активен</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+    <!-- Stats & Overview Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-sm">
+        <div class="text-xs uppercase tracking-wider text-slate-400 font-medium">Статус системы</div>
+        <div class="mt-2 flex items-center justify-between">
+          <span class="text-xl font-bold text-white">В сети</span>
+          <span class="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Онлайн</span>
+        </div>
+      </div>
+
+      <div class="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-sm">
+        <div class="text-xs uppercase tracking-wider text-slate-400 font-medium">Подписчики (/start)</div>
+        <div class="mt-2 flex items-center justify-between">
+          <span id="userCount" class="text-xl font-bold text-white">0</span>
+          <span class="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">users.json</span>
+        </div>
+      </div>
+
+      <div class="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-sm">
+        <div class="text-xs uppercase tracking-wider text-slate-400 font-medium">Модель AI</div>
+        <div class="mt-2 flex items-center justify-between">
+          <span id="statModelName" class="text-base font-bold text-violet-300 truncate">gemini-3.5-flash</span>
+          <span id="geminiStatusBadge" class="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">Gemini</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Settings Card -->
+    <section class="rounded-2xl bg-slate-900/70 border border-slate-800/80 p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-white">Настройка AI (Gemini)</h2>
+            <p class="text-xs text-slate-400">Управление системным промптом ассистента без перезапуска сервера</p>
+          </div>
+        </div>
+
+        <!-- Model Badge -->
+        <div class="self-start sm:self-auto inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-violet-500/10 border border-violet-500/25 text-xs font-medium text-violet-300">
+          <span class="h-2 w-2 rounded-full bg-violet-400 animate-pulse"></span>
+          <span id="aiModelBadge" class="font-mono">gemini-3.5-flash</span>
+        </div>
+      </div>
+
+      <form id="aiConfigForm" class="space-y-4" onsubmit="event.preventDefault(); saveAiConfig();">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="sm:col-span-1">
+            <label for="aiModelSelect" class="block text-sm font-medium text-slate-300 mb-1.5">
+              Основная модель
+            </label>
+            <select
+              id="aiModelSelect"
+              class="w-full rounded-xl bg-slate-950/80 border border-slate-700/70 px-3.5 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-500/80 focus:border-violet-500 transition-all text-sm"
+            >
+              <option value="gemini-3.5-flash">gemini-3.5-flash (Быстрая, стабильная)</option>
+              <option value="gemini-3.8-flash">gemini-3.8-flash (Запасная)</option>
+              <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+              <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label for="systemInstruction" class="block text-sm font-medium text-slate-300 mb-1.5">
+              System Instruction (Системная роль и правила поведения)
+            </label>
+            <textarea
+              id="systemInstruction"
+              rows="3"
+              placeholder="Введите системную инструкцию для Gemini..."
+              class="w-full rounded-xl bg-slate-950/80 border border-slate-700/70 px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/80 focus:border-violet-500 transition-all resize-y text-sm"
+              required
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Fallback Chain Display -->
+        <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2.5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
+              <svg class="w-4 h-4 text-violet-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+              <span>Цепочка каскадного резервирования (Fallback Chain)</span>
+            </span>
+            <span class="self-start sm:self-auto text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-medium">Защита от 503 / 429 активна</span>
+          </div>
+          <p class="text-xs text-slate-400">
+            Если модель перегружена (503/429) или недоступна, бот автоматически пробует следующую модель с задержкой в 1 сек без потери контекста диалога:
+          </p>
+          <div id="fallbackChainContainer" class="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
+            <!-- Заполняется динамически -->
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-xs text-slate-500">Изменения мгновенно применяются к новым диалогам</span>
+          <button
+            type="submit"
+            id="saveAiBtn"
+            class="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white font-medium shadow-lg shadow-violet-600/30 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span id="saveAiBtnText">Сохранить настройки AI</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- AI Feedback Toast -->
+      <div id="aiToast" class="hidden mt-4 p-4 rounded-xl text-sm font-medium transition-all"></div>
+    </section>
+
+    <!-- Broadcast Section -->
+    <section class="rounded-2xl bg-slate-900/70 border border-slate-800/80 p-6 shadow-sm">
+      <div class="flex items-center space-x-3 mb-4">
+        <div class="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold text-white">Текстовая рассылка</h2>
+          <p class="text-xs text-slate-400">Отправьте оповещение всем пользователям, запустившим бота</p>
+        </div>
+      </div>
+
+      <form id="broadcastForm" class="space-y-4" onsubmit="event.preventDefault(); sendBroadcast();">
+        <div>
+          <label for="broadcastMessage" class="block text-sm font-medium text-slate-300 mb-1.5">
+            Текст рассылки
+          </label>
+          <textarea
+            id="broadcastMessage"
+            rows="4"
+            placeholder="Введите текст сообщения для рассылки подписчикам..."
+            class="w-full rounded-xl bg-slate-950/80 border border-slate-700/70 px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/80 focus:border-indigo-500 transition-all resize-y text-sm"
+            required
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-xs text-slate-500">Доставка через Telegram Bot API</span>
+          <button
+            type="submit"
+            id="sendButton"
+            class="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium shadow-lg shadow-indigo-600/30 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+            </svg>
+            <span id="btnText">Отправить в Telegram</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Feedback Toast / Alert -->
+      <div id="statusToast" class="hidden mt-4 p-4 rounded-xl text-sm font-medium transition-all"></div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
+    Telegram Bot Web Dashboard &bull; FastAPI + Aiogram 3 + Google Gemini API
+  </footer>
+
+  <script>
+    // ----------------- Загрузка и сохранение настроек AI -----------------
+    function renderFallbackChain(models) {
+      const container = document.getElementById('fallbackChainContainer');
+      if (!container || !models || !models.length) return;
+      container.innerHTML = models.map((m, idx) => `
+        <div class="flex items-center space-x-1.5">
+          <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs ${idx === 0 ? 'bg-violet-600/30 text-violet-300 border border-violet-500/40 font-semibold' : 'bg-slate-800/80 text-slate-300 border border-slate-700/60'}">
+            ${idx === 0 ? '<span class="text-violet-400">★</span>' : '<span class="text-slate-500">#' + (idx + 1) + '</span>'}
+            <span>${m}</span>
+          </span>
+          ${idx < models.length - 1 ? '<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>' : ''}
+        </div>
+      `).join('');
+    }
+
+    async function loadAiConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const cfg = await res.json();
+          document.getElementById('systemInstruction').value = cfg.system_instruction || '';
+          if (cfg.model) {
+            document.getElementById('aiModelBadge').innerText = cfg.model;
+            document.getElementById('statModelName').innerText = cfg.model;
+            const select = document.getElementById('aiModelSelect');
+            if (select) select.value = cfg.model;
+          }
+          if (cfg.fallback_models) {
+            renderFallbackChain(cfg.fallback_models);
+          }
+        }
+      } catch (e) {
+        console.error('Ошибка загрузки config.json:', e);
+      }
+    }
+
+    async function saveAiConfig() {
+      const textarea = document.getElementById('systemInstruction');
+      const modelSelect = document.getElementById('aiModelSelect');
+      const btn = document.getElementById('saveAiBtn');
+      const btnText = document.getElementById('saveAiBtnText');
+      const toast = document.getElementById('aiToast');
+      const instruction = textarea.value.trim();
+      const model = modelSelect ? modelSelect.value : 'gemini-3.5-flash';
+
+      if (!instruction) return;
+
+      btn.disabled = true;
+      btnText.innerText = 'Сохранение...';
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system_instruction: instruction, model: model })
+        });
+        const data = await res.json();
+
+        toast.classList.remove('hidden');
+        if (res.ok && data.status === 'success') {
+          if (data.config && data.config.model) {
+            document.getElementById('aiModelBadge').innerText = data.config.model;
+            document.getElementById('statModelName').innerText = data.config.model;
+          }
+          if (data.config && data.config.fallback_models) {
+            renderFallbackChain(data.config.fallback_models);
+          }
+          toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center space-x-2';
+          toast.innerHTML = `
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span>${data.detail || 'Настройки AI успешно сохранены!'}</span>
+          `;
+          setTimeout(() => toast.classList.add('hidden'), 5000);
+        } else {
+          toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-red-500/10 text-red-400 border-red-500/30 flex items-center space-x-2';
+          toast.innerHTML = `
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span>${data.detail || 'Не удалось сохранить настройки.'}</span>
+          `;
+        }
+      } catch (e) {
+        toast.classList.remove('hidden');
+        toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-red-500/10 text-red-400 border-red-500/30';
+        toast.innerText = 'Ошибка соединения при сохранении настроек.';
+      } finally {
+        btn.disabled = false;
+        btnText.innerText = 'Сохранить настройки AI';
+      }
+    }
+
+    // ----------------- Статистика -----------------
+    async function updateStats() {
+      try {
+        const res = await fetch('/api/stats');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('userCount').innerText = data.user_count;
+          if (data.model) {
+            document.getElementById('statModelName').innerText = data.model;
+            document.getElementById('aiModelBadge').innerText = data.model;
+          }
+          if (data.fallback_models) {
+            renderFallbackChain(data.fallback_models);
+          }
+        }
+      } catch (e) {
+        console.error('Ошибка обновления статистики:', e);
+      }
+    }
+
+    // ----------------- Рассылка -----------------
+    async function sendBroadcast() {
+      const textarea = document.getElementById('broadcastMessage');
+      const button = document.getElementById('sendButton');
+      const btnText = document.getElementById('btnText');
+      const toast = document.getElementById('statusToast');
+      const text = textarea.value.trim();
+
+      if (!text) return;
+
+      button.disabled = true;
+      btnText.innerText = 'Отправка...';
+
+      try {
+        const response = await fetch('/api/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await response.json();
+
+        toast.classList.remove('hidden');
+
+        if (data.status === 'success') {
+          toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center space-x-2';
+          toast.innerHTML = `
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span>${data.detail || 'Отправлено ' + data.sent_count + ' пользователям'}</span>
+          `;
+          textarea.value = '';
+          updateStats();
+        } else if (data.status === 'warning' || (data.detail && data.detail.includes('Сначала напишите'))) {
+          toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-amber-500/10 text-amber-400 border-amber-500/30 flex items-center space-x-2';
+          toast.innerHTML = `
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span>${data.detail}</span>
+          `;
+        } else {
+          toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-red-500/10 text-red-400 border-red-500/30 flex items-center space-x-2';
+          toast.innerHTML = `
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span>${data.detail || 'Не удалось выполнить рассылку'}</span>
+          `;
+        }
+      } catch (err) {
+        toast.classList.remove('hidden');
+        toast.className = 'mt-4 p-4 rounded-xl text-sm border bg-red-500/10 text-red-400 border-red-500/30';
+        toast.innerText = 'Ошибка соединения с сервером. Проверьте запущен ли main.py.';
+      } finally {
+        button.disabled = false;
+        btnText.innerText = 'Отправить в Telegram';
+      }
+    }
+
+    // Инициализация при загрузке страницы
+    loadAiConfig();
+    updateStats();
+    setInterval(updateStats, 5000);
+  </script>
+</body>
+</html>
