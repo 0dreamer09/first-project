@@ -7,6 +7,7 @@ import re
 import sys
 import time
 from typing import Optional, List, Dict, Any, Tuple
+import unicodedata
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
@@ -138,22 +139,22 @@ def extract_transcription_from_response(text: str) -> str:
     Извлекает расшифровку сказанного из ответа модели для сохранения в историю контекста.
     """
     # 1. Поиск строки с иконкой 🎤
-    m = re.search(r'🎤\s*(?:<i>)?\s*[«"“]?(.*?)[»"”]?(?:\s*</i>)?(?:\n|$)', text)
+    m = re.search(r'🎤[ \t]*(?:<i>|[«"“*]|&lt;i&gt;)*[ \t]*(.*?)[ \t]*(?:</i>|[»"”*]|&lt;/i&gt;)*(?:\n|$)', text)
     if m and m.group(1).strip():
-        t = re.sub(r'<[^>]+>', '', m.group(1)).strip('«»" \t\r\n')
+        t = re.sub(r'<[^>]+>|&lt;[^&]+&gt;', '', m.group(1)).strip('«»"\'* \t\r\n')
         if t:
             return t
     # 2. Поиск строки вида "Расшифровка: ..."
     m = re.search(r'(?:[Рр]асшифровка|[Тт]ранскрипция):\s*[«"“]?(.*?)[»"”]?(?:\n|$)', text)
     if m and m.group(1).strip():
-        t = re.sub(r'<[^>]+>', '', m.group(1)).strip('«»" \t\r\n')
+        t = re.sub(r'<[^>]+>|&lt;[^&]+&gt;', '', m.group(1)).strip('«»"\'* \t\r\n')
         if t:
             return t
     # 3. Резерв: первая непустая строка до 200 символов
     lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
     if lines and len(lines[0]) < 200:
         cleaned = re.sub(r'^[🎤*#_ \t]+', '', lines[0])
-        cleaned = re.sub(r'<[^>]+>', '', cleaned).strip('«»" \t\r\n')
+        cleaned = re.sub(r'<[^>]+>|&lt;[^&]+&gt;', '', cleaned).strip('«»"\'* \t\r\n')
         if cleaned:
             return cleaned
     return ""
@@ -219,12 +220,57 @@ def get_or_init_gemini_client() -> Optional[genai.Client]:
 
 # ----------------- Форматирование текста (Markdown -> Telegram HTML) -----------------
 
+def is_emoji_or_symbol(char: str) -> bool:
+    """Проверяет, является ли символ эмодзи или специальным маркером-значком."""
+    if not char:
+        return False
+    cat = unicodedata.category(char)
+    if cat in ("So", "Sm", "Sk"):
+        return True
+    code = ord(char)
+    if (
+        code >= 0x1F000
+        or (0x2000 <= code <= 0x2BFF)
+        or (0xE000 <= code <= 0xF8FF)
+        or (0xFE00 <= code <= 0xFE0F)
+    ):
+        if char not in "«»\"'()[]{}<>,.;:!?/\\|-_=+*&^%$#@~`":
+            return True
+    return False
+
+def clean_list_line(line: str) -> str:
+    """
+    Очищает маркдаун-маркеры списка (*, - в начале строки):
+    - Если после маркера идет эмодзи или значок: оставляет только эмодзи.
+    - Если идет обычный текст/форматирование: заменяет на красивый маркер списка •.
+    """
+    m = re.match(r'^([ \t]*)[*\-][ \t]+(.*)$', line)
+    if not m:
+        return line
+    indent = m.group(1)
+    rest = m.group(2).strip()
+    if not rest:
+        return ""
+    first_char = rest[0]
+    if (
+        is_emoji_or_symbol(first_char)
+        or first_char in "•🔹🔸▫▪✔✅❌👉💡📌⚡🎯🚀"
+        or re.match(r'^\d+[\.\)]\s+', rest)
+        or re.match(r'^[•⁃‣–—]\s+', rest)
+    ):
+        return f"{indent}{rest}"
+    else:
+        return f"{indent}• {rest}"
+
 def markdown_to_telegram_html(text: str) -> str:
     """
     Конвертирует стандартный Markdown от Gemini в валидный Telegram HTML:
     - Извлекает и экранирует блоки кода (```...```) и инлайн-код (`...`)
     - Экранирует сырые символы (&, <, >) в основном тексте
+    - Восстанавливает валидные парные HTML-теги от модели (<b>, <i>, <code>, <s>)
+    - Оформляет строку транскрипции голосового сообщения (🎤 <i>«...»</i>)
     - Удаляет горизонтальные разделители (***, ---, ___)
+    - Очищает маркдаун-маркеры списков (* или -) перед эмодзи и текстом
     - Заменяет заголовки (###, ##, #) на <b>...</b> с отступом
     - Заменяет **текст** / __текст__ на <b>текст</b> (жирный)
     - Заменяет *текст* / _текст_ на <i>текст</i> (курсив)
@@ -260,21 +306,43 @@ def markdown_to_telegram_html(text: str) -> str:
     # 3. Экранируем сырые символы в основном тексте (&, <, >)
     text = html.escape(text)
 
-    # 4. Удаляем горизонтальные разделители (***, ---, ___)
+    # 4. Восстанавливаем валидные парные HTML-теги, сгенерированные моделью
+    text = re.sub(r'&lt;([bius])&gt;(.*?)&lt;/\1&gt;', r'<\1>\2</\1>', text, flags=re.DOTALL)
+
+    # 5. Специальная обработка строки транскрипции голосового сообщения (🎤 ...)
+    def format_voice_line(match):
+        raw_content = match.group(1).strip()
+        # Очищаем от возможных сырых или экранированных тегов
+        cleaned = re.sub(r'</?(?:i|em|b|strong)>|&lt;/?(?:i|em|b|strong)&gt;', '', raw_content).strip()
+        # Очищаем от обрамляющего маркдауна (*, _)
+        cleaned = re.sub(r'^[*_]+|[*_]+$', '', cleaned).strip()
+        # Очищаем от внешних кавычек любого вида
+        cleaned = re.sub(r'^(?:«|&quot;|"|\'|“)+|(?:»|&quot;|"|\'|”)+$', '', cleaned).strip()
+        if not cleaned:
+            return match.group(0)
+        return f"🎤 <i>«{cleaned}»</i>"
+
+    text = re.sub(r'^[ \t]*🎤[ \t]*(.+)$', format_voice_line, text, flags=re.MULTILINE)
+
+    # 6. Удаляем горизонтальные разделители (***, ---, ___)
     text = re.sub(r'^[ \t]*([*\-_]){3,}[ \t]*$', '', text, flags=re.MULTILINE)
 
-    # 5. Заголовки (###, ##, #) -> <b>...</b> с отступом
+    # 7. Очистка маркдаун-маркеров списка (* или - в начале строк)
+    lines = text.split('\n')
+    text = '\n'.join(clean_list_line(line) for line in lines)
+
+    # 8. Заголовки (###, ##, #) -> <b>...</b> с отступом
     text = re.sub(r'^(#{1,6})\s+(.+)$', r'\n<b>\2</b>\n', text, flags=re.MULTILINE)
 
-    # 6. Жирный текст (**текст** или __текст__)
+    # 9. Жирный текст (**текст** или __текст__)
     text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
     text = re.sub(r'__(.+?)__', r'<b>\1</b>', text, flags=re.DOTALL)
 
-    # 7. Курсив (*текст* или _текст_)
+    # 10. Курсив (*текст* или _текст_)
     text = re.sub(r'(?<!\w)\*([^*]+?)\*(?!\w)', r'<i>\1</i>', text)
     text = re.sub(r'(?<!\w)_([^_]+?)_(?!\w)', r'<i>\1</i>', text)
 
-    # 8. Возвращаем блоки кода и инлайн-код
+    # 11. Возвращаем блоки кода и инлайн-код
     for idx, block in enumerate(code_blocks):
         text = text.replace(f'@@CODEBLOCK_{idx}@@', block)
     for idx, inline in enumerate(inline_codes):
