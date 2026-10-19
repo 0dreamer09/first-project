@@ -1,5 +1,6 @@
 import asyncio
 import html
+import io
 import json
 import os
 import re
@@ -46,6 +47,7 @@ bot_instance: Optional[Bot] = None
 gemini_client: Optional[genai.Client] = None
 user_histories: Dict[int, List[genai_types.Content]] = {}
 MAX_HISTORY_MESSAGES = 10  # Хранение последних 10 сообщений (5 раундов диалога: user + model)
+MAX_VOICE_SIZE_BYTES = 20 * 1024 * 1024  # 20 МБ максимальный размер голосового сообщения
 
 def get_user_history(chat_id: int) -> List[genai_types.Content]:
     """
@@ -57,6 +59,31 @@ def get_user_history(chat_id: int) -> List[genai_types.Content]:
     while trimmed and trimmed[0].role != "user":
         trimmed.pop(0)
     return trimmed
+
+def extract_transcription_from_response(text: str) -> str:
+    """
+    Извлекает расшифровку сказанного из ответа модели для сохранения в историю контекста.
+    """
+    # 1. Поиск строки с иконкой 🎤
+    m = re.search(r'🎤\s*(?:<i>)?\s*[«"“]?(.*?)[»"”]?(?:\s*</i>)?(?:\n|$)', text)
+    if m and m.group(1).strip():
+        t = re.sub(r'<[^>]+>', '', m.group(1)).strip('«»" \t\r\n')
+        if t:
+            return t
+    # 2. Поиск строки вида "Расшифровка: ..."
+    m = re.search(r'(?:[Рр]асшифровка|[Тт]ранскрипция):\s*[«"“]?(.*?)[»"”]?(?:\n|$)', text)
+    if m and m.group(1).strip():
+        t = re.sub(r'<[^>]+>', '', m.group(1)).strip('«»" \t\r\n')
+        if t:
+            return t
+    # 3. Резерв: первая непустая строка до 200 символов
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+    if lines and len(lines[0]) < 200:
+        cleaned = re.sub(r'^[🎤*#_ \t]+', '', lines[0])
+        cleaned = re.sub(r'<[^>]+>', '', cleaned).strip('«»" \t\r\n')
+        if cleaned:
+            return cleaned
+    return ""
 
 
 # ----------------- Работа с конфигурацией AI (config.json) -----------------
@@ -187,13 +214,16 @@ def markdown_to_telegram_html(text: str) -> str:
 
 async def generate_and_stream_response(
     chat_id: int,
-    user_text: str,
+    user_text: Optional[str],
     system_instruction: str,
     user_tag: str,
-    status_msg: types.Message
+    status_msg: types.Message,
+    audio_bytes: Optional[bytes] = None,
+    audio_mime_type: str = "audio/ogg"
 ) -> bool:
     """
     Каскадный опрос моделей со стримингом (Streaming response) и таймаутом 6.0 секунд на каждую модель.
+    Поддерживает как текстовые сообщения, так и голосовые сообщения (мультимодальное аудио).
     Обновляет status_msg чанками каждые 1–1.5 секунды как обычный текст (parse_mode=None).
     Финальный ответ конвертируется в валидный Telegram HTML с откатом на чистый текст.
     """
@@ -208,23 +238,38 @@ async def generate_and_stream_response(
     # Цепочка опроса: приоритетная модель первой, затем запасные
     models_chain = [primary_model] + [m for m in configured_fallbacks if m != primary_model]
 
+    # Формируем части контента для текущего запроса (текст или аудио + инструкция)
+    if audio_bytes:
+        audio_part = genai_types.Part.from_bytes(data=audio_bytes, mime_type=audio_mime_type)
+        voice_prompt = (
+            "Прослушай приложенное голосовое сообщение.\n"
+            "1. В самой первой строке обязательно выведи точную расшифровку сказанного (транскрипцию) в формате:\n"
+            "🎤 <i>«расшифрованный текст»</i>\n\n"
+            "2. Затем сделай пустую строку и дай развернутый, точный и полезный ответ на вопрос или сообщение "
+            "с учётом системной инструкции и контекста предыдущего диалога."
+        )
+        current_turn_parts = [audio_part, genai_types.Part.from_text(text=voice_prompt)]
+    else:
+        current_turn_parts = [genai_types.Part.from_text(text=user_text or "")]
+
     # Подготавливаем историю диалога для контекста (до 10 сообщений / 5 раундов)
     history = get_user_history(chat_id)
     request_contents = list(history) + [
         genai_types.Content(
             role="user",
-            parts=[genai_types.Part.from_text(text=user_text)]
+            parts=current_turn_parts
         )
     ]
 
     total_models = len(models_chain)
+    input_desc = f"audio ({len(audio_bytes)} bytes)" if audio_bytes else f"text ({len(user_text or '')} chars)"
 
     for idx, model_name in enumerate(models_chain):
         is_fallback = (idx > 0)
         next_model = models_chain[idx + 1] if idx + 1 < total_models else None
 
         try:
-            print(f"[Gemini -> {user_tag}] Requesting model '{model_name}' (attempt {idx + 1}/{total_models}, timeout 6s, context: {len(history)} msgs)...")
+            print(f"[Gemini -> {user_tag}] Requesting model '{model_name}' (attempt {idx + 1}/{total_models}, timeout 6s, {input_desc}, context: {len(history)} msgs)...")
             
             # Запускаем стриминг с жестким таймаутом 6.0 секунд на получение первого ответа
             stream = await asyncio.wait_for(
@@ -292,8 +337,18 @@ async def generate_and_stream_response(
             if accumulated_text.strip():
                 if chat_id not in user_histories:
                     user_histories[chat_id] = []
+
+                if audio_bytes:
+                    transcription = extract_transcription_from_response(accumulated_text)
+                    if transcription:
+                        saved_user_text = f"🎤 [Голосовое сообщение]: {transcription}"
+                    else:
+                        saved_user_text = "🎤 [Голосовое сообщение]"
+                else:
+                    saved_user_text = user_text or ""
+
                 user_histories[chat_id].append(
-                    genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=user_text)])
+                    genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=saved_user_text)])
                 )
                 user_histories[chat_id].append(
                     genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=accumulated_text)])
@@ -397,7 +452,7 @@ async def command_start_handler(message: types.Message):
     await message.answer(
         f"👋 Привет, <b>{full_name}</b>!\n\n"
         f"Я быстрый AI-ассистент (<b>{model_name}</b>) со стримингом ответов и каскадной защитой от перегрузок.\n\n"
-        f"💬 Напишите мне любой вопрос, и я начну отвечать в реальном времени.\n"
+        f"💬 Напишите мне вопрос текстом или отправьте <b>голосовое сообщение</b> — я расшифрую его и отвечу.\n"
         f"🔄 Команда /reset — очистить историю диалога.\n"
         f"🌐 Веб-панель: <code>http://localhost:{WEB_PORT}</code>",
         parse_mode=ParseMode.HTML
@@ -413,6 +468,87 @@ async def command_reset_handler(message: types.Message):
         "🔄 <b>История диалога очищена.</b>\n"
         "Контекст сброшен, можем начать общение с чистого листа!",
         parse_mode=ParseMode.HTML
+    )
+
+@dp.message(F.voice)
+async def ai_voice_handler(message: types.Message):
+    """
+    Обработчик голосовых сообщений:
+    - Проверяет размер (до 20 МБ)
+    - Скачивает аудио (.ogg Opus) в память через bot.download()
+    - Передает в Gemini со стримингом, Fallback Chain и контекстной памятью
+    - Сохраняет транскрипцию в историю пользователя
+    """
+    chat_id = message.chat.id
+    username = message.from_user.username if message.from_user else None
+    user_tag = f"@{username}" if username else f"id:{chat_id}"
+    full_name = message.from_user.full_name if message.from_user else "пользователь"
+
+    save_user(chat_id=chat_id, username=username, full_name=full_name)
+
+    client = get_or_init_gemini_client()
+    if not client:
+        await message.answer(
+            "⚠️ <b>GEMINI_API_KEY</b> не настроен в файле <code>.env</code>.\n"
+            "Добавьте ключ в <code>.env</code>, чтобы включить распознавание голосовых сообщений.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    # Проверка размера голосового сообщения
+    file_size = message.voice.file_size or 0
+    if file_size > MAX_VOICE_SIZE_BYTES:
+        await message.answer(
+            "⚠️ <b>Голосовое сообщение слишком большое</b> (превышает 20 МБ).\n"
+            "Пожалуйста, отправьте более короткую запись.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    # Отправляем индикатор набора текста
+    await message.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+    status_msg = await message.answer("🎧 Слушаю голосовое сообщение...")
+
+    try:
+        # Скачиваем голосовое сообщение в память
+        voice_buffer = io.BytesIO()
+        await message.bot.download(message.voice, destination=voice_buffer)
+        audio_bytes = voice_buffer.getvalue()
+
+        if not audio_bytes:
+            raise ValueError("Audio buffer is empty")
+
+        if len(audio_bytes) > MAX_VOICE_SIZE_BYTES:
+            await status_msg.edit_text(
+                "⚠️ Голосовое сообщение превышает лимит в 20 МБ. Пожалуйста, отправьте более короткую запись."
+            )
+            return
+
+        print(f"[Voice -> {user_tag}] Downloaded voice note: {len(audio_bytes)} bytes, duration: {message.voice.duration}s")
+
+    except Exception as e:
+        print(f"[Voice ERROR -> {user_tag}] Failed to download audio: {e}")
+        try:
+            await status_msg.edit_text(
+                "❌ Не удалось обработать аудиофайл (возможно, файл поврежден). "
+                "Попробуйте записать голосовое сообщение ещё раз или написать текстом."
+            )
+        except TelegramAPIError:
+            pass
+        return
+
+    cfg = load_config()
+    system_instruction = cfg.get("system_instruction", "")
+
+    # Запускаем распознавание и ответ через Gemini со стримингом и цепочкой fallback
+    await generate_and_stream_response(
+        chat_id=chat_id,
+        user_text=None,
+        system_instruction=system_instruction,
+        user_tag=user_tag,
+        status_msg=status_msg,
+        audio_bytes=audio_bytes,
+        audio_mime_type=message.voice.mime_type or "audio/ogg"
     )
 
 @dp.message(F.text & ~F.text.startswith("/"))
