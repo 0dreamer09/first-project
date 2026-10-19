@@ -78,6 +78,95 @@
       </div>
     </div>
 
+    <!-- Live Analytics Metrics Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-sm hover:border-slate-700/80 transition-all">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Текстовые запросы</span>
+          <span class="p-1.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs font-medium">💬 Text</span>
+        </div>
+        <div class="mt-3 flex items-baseline justify-between">
+          <span id="textRequestsCount" class="text-2xl font-bold text-white font-mono">0</span>
+          <span class="text-xs text-slate-500 font-medium">сообщений</span>
+        </div>
+      </div>
+
+      <div class="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-sm hover:border-slate-700/80 transition-all">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Голосовые сообщения</span>
+          <span class="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-medium">🎤 Voice</span>
+        </div>
+        <div class="mt-3 flex items-baseline justify-between">
+          <span id="voiceRequestsCount" class="text-2xl font-bold text-white font-mono">0</span>
+          <span class="text-xs text-slate-500 font-medium">аудиозаписей</span>
+        </div>
+      </div>
+
+      <div class="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-sm hover:border-slate-700/80 transition-all">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Срабатываний Fallback</span>
+          <span class="p-1.5 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20 text-xs font-medium">⚡ Failover</span>
+        </div>
+        <div class="mt-3 flex items-baseline justify-between">
+          <span id="fallbackCount" class="text-2xl font-bold text-amber-300 font-mono">0</span>
+          <span class="text-xs text-slate-500 font-medium">переключений</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Feed Section -->
+    <section class="rounded-2xl bg-slate-900/70 border border-slate-800/80 p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-white">Лента активности</h2>
+            <p class="text-xs text-slate-400">Последние 20 событий взаимодействия с ботом в реальном времени</p>
+          </div>
+        </div>
+
+        <div class="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300 self-start sm:self-auto">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span>Автообновление (3.5с)</span>
+        </div>
+      </div>
+
+      <!-- Table Container -->
+      <div class="overflow-hidden rounded-xl border border-slate-800/80 bg-slate-950/60">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-900/90 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800/80">
+              <tr>
+                <th scope="col" class="py-3 px-4 font-semibold">Время</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Пользователь</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Тип</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Модель</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Статус</th>
+              </tr>
+            </thead>
+            <tbody id="activityFeedBody" class="divide-y divide-slate-800/60 font-sans">
+              <!-- Заполняется динамически через JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="activityFeedEmpty" class="py-10 text-center text-slate-500 text-sm">
+          <svg class="mx-auto h-8 w-8 text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+          </svg>
+          Событий пока нет. Напишите боту в Telegram или отправьте голосовое сообщение!
+        </div>
+      </div>
+    </section>
+
     <!-- AI Settings Card -->
     <section class="rounded-2xl bg-slate-900/70 border border-slate-800/80 p-6 shadow-sm">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -317,19 +406,75 @@
       }
     }
 
-    // ----------------- Статистика -----------------
+    // ----------------- Статистика и лента активности -----------------
+    function renderActivityFeed(events) {
+      const tbody = document.getElementById('activityFeedBody');
+      const emptyState = document.getElementById('activityFeedEmpty');
+      if (!tbody) return;
+
+      if (!events || events.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+      if (emptyState) emptyState.classList.add('hidden');
+
+      tbody.innerHTML = events.map(ev => {
+        const isVoice = ev.type === 'voice';
+        const typeBadge = isVoice
+          ? `<span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/25"><span>🎤</span><span>Голос</span></span>`
+          : `<span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-500/10 text-sky-300 border border-sky-500/25"><span>💬</span><span>Текст</span></span>`;
+
+        let statusBadge = '';
+        if (ev.status === 'success') {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ Успешно</span>`;
+        } else if (ev.status === 'fallback') {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">⚡ Fallback</span>`;
+        } else {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">✕ Ошибка</span>`;
+        }
+
+        return `
+          <tr class="hover:bg-slate-800/30 transition-colors">
+            <td class="py-2.5 px-4 text-xs font-mono text-slate-400 whitespace-nowrap">${ev.timestamp}</td>
+            <td class="py-2.5 px-4 text-xs font-medium text-slate-200 whitespace-nowrap">
+              <span class="font-mono text-indigo-300">${ev.username}</span>
+            </td>
+            <td class="py-2.5 px-4 whitespace-nowrap">${typeBadge}</td>
+            <td class="py-2.5 px-4 text-xs font-mono text-slate-300 whitespace-nowrap">${ev.model || '—'}</td>
+            <td class="py-2.5 px-4 whitespace-nowrap">${statusBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     async function updateStats() {
       try {
         const res = await fetch('/api/stats');
         if (res.ok) {
           const data = await res.json();
           document.getElementById('userCount').innerText = data.user_count;
+          if (data.text_requests !== undefined) {
+            const el = document.getElementById('textRequestsCount');
+            if (el) el.innerText = data.text_requests;
+          }
+          if (data.voice_requests !== undefined) {
+            const el = document.getElementById('voiceRequestsCount');
+            if (el) el.innerText = data.voice_requests;
+          }
+          if (data.fallback_triggers !== undefined) {
+            const el = document.getElementById('fallbackCount');
+            if (el) el.innerText = data.fallback_triggers;
+          }
           if (data.model) {
             document.getElementById('statModelName').innerText = data.model;
             document.getElementById('aiModelBadge').innerText = data.model;
           }
           if (data.fallback_models) {
             renderFallbackChain(data.fallback_models);
+          }
+          if (data.recent_events) {
+            renderActivityFeed(data.recent_events);
           }
         }
       } catch (e) {
@@ -400,7 +545,7 @@
     // Инициализация при загрузке страницы
     loadAiConfig();
     updateStats();
-    setInterval(updateStats, 5000);
+    setInterval(updateStats, 3500);
   </script>
 </body>
 </html>

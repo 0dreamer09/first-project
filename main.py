@@ -49,6 +49,39 @@ user_histories: Dict[int, List[genai_types.Content]] = {}
 MAX_HISTORY_MESSAGES = 10  # Хранение последних 10 сообщений (5 раундов диалога: user + model)
 MAX_VOICE_SIZE_BYTES = 20 * 1024 * 1024  # 20 МБ максимальный размер голосового сообщения
 
+# Счетчики статистики и лента активности
+stats_counters: Dict[str, int] = {
+    "text_requests": 0,
+    "voice_requests": 0,
+    "fallback_triggers": 0,
+}
+recent_events: List[Dict[str, Any]] = []
+MAX_RECENT_EVENTS = 20
+
+def log_event(
+    chat_id: int,
+    username: Optional[str],
+    event_type: str,
+    model: str,
+    status: str,
+    detail: str = ""
+):
+    """Добавляет событие в память (хранятся последние 20 событий)."""
+    now_str = time.strftime("%H:%M:%S")
+    user_label = f"@{username}" if username else f"id:{chat_id}"
+    event = {
+        "timestamp": now_str,
+        "chat_id": chat_id,
+        "username": user_label,
+        "type": event_type,  # "text" или "voice"
+        "model": model,
+        "status": status,    # "success", "fallback", "error"
+        "detail": detail
+    }
+    recent_events.append(event)
+    if len(recent_events) > MAX_RECENT_EVENTS:
+        recent_events.pop(0)
+
 def get_user_history(chat_id: int) -> List[genai_types.Content]:
     """
     Возвращает накопленную историю диалога пользователя (до MAX_HISTORY_MESSAGES = 10).
@@ -219,7 +252,8 @@ async def generate_and_stream_response(
     user_tag: str,
     status_msg: types.Message,
     audio_bytes: Optional[bytes] = None,
-    audio_mime_type: str = "audio/ogg"
+    audio_mime_type: str = "audio/ogg",
+    username: Optional[str] = None
 ) -> bool:
     """
     Каскадный опрос моделей со стримингом (Streaming response) и таймаутом 6.0 секунд на каждую модель.
@@ -230,6 +264,13 @@ async def generate_and_stream_response(
     client = get_or_init_gemini_client()
     if not client:
         return False
+
+    # Учитываем счетчик запросов (текст или голос)
+    req_type = "voice" if audio_bytes else "text"
+    if req_type == "voice":
+        stats_counters["voice_requests"] += 1
+    else:
+        stats_counters["text_requests"] += 1
 
     cfg = load_config()
     primary_model = cfg.get("model", "gemini-3.5-flash")
@@ -355,10 +396,22 @@ async def generate_and_stream_response(
                 )
                 user_histories[chat_id] = user_histories[chat_id][-MAX_HISTORY_MESSAGES:]
 
+            # Логируем событие в ленту активности
+            status_label = "fallback" if is_fallback else "success"
+            log_event(
+                chat_id=chat_id,
+                username=username,
+                event_type=req_type,
+                model=model_name,
+                status=status_label,
+                detail=f"{len(accumulated_text)} chars"
+            )
+
             print(f"[Gemini OK -> {user_tag}] Response delivered from '{model_name}' ({len(accumulated_text)} chars, stored history: {len(user_histories[chat_id])} msgs)")
             return True
 
         except (asyncio.TimeoutError, TimeoutError):
+            stats_counters["fallback_triggers"] += 1
             error_str = "Timeout 6.0s (модель не ответила за 6 сек)"
             if next_model:
                 print(f"[Warning] Model {model_name} failed ({error_str}), trying fallback to {next_model}...")
@@ -371,6 +424,7 @@ async def generate_and_stream_response(
                 print(f"[Warning] Model {model_name} failed ({error_str}), all fallback models exhausted.")
 
         except Exception as e:
+            stats_counters["fallback_triggers"] += 1
             error_str = str(e)
             if next_model:
                 print(f"[Warning] Model {model_name} failed ({error_str}), trying fallback to {next_model}...")
@@ -388,6 +442,14 @@ async def generate_and_stream_response(
     except TelegramAPIError:
         pass
 
+    log_event(
+        chat_id=chat_id,
+        username=username,
+        event_type=req_type,
+        model=models_chain[0] if models_chain else "unknown",
+        status="error",
+        detail="All models exhausted"
+    )
     return False
 
 # ----------------- Работа со списком пользователей -----------------
@@ -548,7 +610,8 @@ async def ai_voice_handler(message: types.Message):
         user_tag=user_tag,
         status_msg=status_msg,
         audio_bytes=audio_bytes,
-        audio_mime_type=message.voice.mime_type or "audio/ogg"
+        audio_mime_type=message.voice.mime_type or "audio/ogg",
+        username=username
     )
 
 @dp.message(F.text & ~F.text.startswith("/"))
@@ -582,7 +645,8 @@ async def ai_message_handler(message: types.Message):
         user_text=user_text,
         system_instruction=system_instruction,
         user_tag=user_tag,
-        status_msg=status_msg
+        status_msg=status_msg,
+        username=username
     )
 
 # ----------------- FastAPI веб-сервер -----------------
@@ -602,7 +666,7 @@ async def serve_dashboard():
 
 @app.get("/api/stats")
 async def get_stats():
-    """Возвращает статистику для панели управления."""
+    """Возвращает расширенную статистику и недавние события для панели управления."""
     users = load_users()
     cfg = load_config()
     has_gemini = bool(os.getenv("GEMINI_API_KEY", "").strip() or gemini_client)
@@ -611,7 +675,12 @@ async def get_stats():
         "bot_configured": bool(BOT_TOKEN),
         "gemini_configured": has_gemini,
         "model": cfg.get("model", "gemini-3.5-flash"),
-        "fallback_models": cfg.get("fallback_models", DEFAULT_CONFIG["fallback_models"])
+        "fallback_models": cfg.get("fallback_models", DEFAULT_CONFIG["fallback_models"]),
+        "active_dialogues": len(user_histories),
+        "text_requests": stats_counters["text_requests"],
+        "voice_requests": stats_counters["voice_requests"],
+        "fallback_triggers": stats_counters["fallback_triggers"],
+        "recent_events": list(reversed(recent_events))
     }
 
 @app.get("/api/config")
