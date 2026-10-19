@@ -82,6 +82,46 @@ def log_event(
     if len(recent_events) > MAX_RECENT_EVENTS:
         recent_events.pop(0)
 
+# ----------------- Персистентное хранение переписки (chats/{chat_id}.json) -----------------
+
+CHATS_DIR = os.path.join(os.path.dirname(__file__), "chats")
+
+def get_user_chat_file(chat_id: int) -> str:
+    """Возвращает путь к файлу переписки конкретного пользователя."""
+    if not os.path.exists(CHATS_DIR):
+        os.makedirs(CHATS_DIR, exist_ok=True)
+    return os.path.join(CHATS_DIR, f"{chat_id}.json")
+
+def load_user_messages(chat_id: int) -> List[Dict[str, Any]]:
+    """Загружает сохраненную историю сообщений пользователя из chats/{chat_id}.json."""
+    path = get_user_chat_file(chat_id)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[ERROR] Failed to read chat history for {chat_id}: {e}", file=sys.stderr)
+        return []
+
+def append_user_message(chat_id: int, role: str, msg_type: str, text: str):
+    """Добавляет сообщение (user или bot) в историю chats/{chat_id}.json."""
+    messages = load_user_messages(chat_id)
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    messages.append({
+        "timestamp": now_str,
+        "role": role,        # "user" или "bot"
+        "type": msg_type,    # "text" или "voice"
+        "text": text
+    })
+    path = get_user_chat_file(chat_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(messages, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[ERROR] Failed to save chat message for {chat_id}: {e}", file=sys.stderr)
+
+
 def get_user_history(chat_id: int) -> List[genai_types.Content]:
     """
     Возвращает накопленную историю диалога пользователя (до MAX_HISTORY_MESSAGES = 10).
@@ -383,10 +423,15 @@ async def generate_and_stream_response(
                     transcription = extract_transcription_from_response(accumulated_text)
                     if transcription:
                         saved_user_text = f"🎤 [Голосовое сообщение]: {transcription}"
+                        chat_user_text = transcription
                     else:
                         saved_user_text = "🎤 [Голосовое сообщение]"
+                        chat_user_text = "[Голосовое сообщение]"
+                    msg_type = "voice"
                 else:
                     saved_user_text = user_text or ""
+                    chat_user_text = user_text or ""
+                    msg_type = "text"
 
                 user_histories[chat_id].append(
                     genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=saved_user_text)])
@@ -395,6 +440,10 @@ async def generate_and_stream_response(
                     genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=accumulated_text)])
                 )
                 user_histories[chat_id] = user_histories[chat_id][-MAX_HISTORY_MESSAGES:]
+
+                # Персистентное сохранение реплик в файл переписки chats/{chat_id}.json
+                append_user_message(chat_id=chat_id, role="user", msg_type=msg_type, text=chat_user_text)
+                append_user_message(chat_id=chat_id, role="bot", msg_type="text", text=accumulated_text)
 
             # Логируем событие в ленту активности
             status_label = "fallback" if is_fallback else "success"
@@ -682,6 +731,76 @@ async def get_stats():
         "fallback_triggers": stats_counters["fallback_triggers"],
         "recent_events": list(reversed(recent_events))
     }
+
+# ----------------- Работа с пользователями и историей переписки -----------------
+
+@app.get("/api/users")
+async def get_users_list_endpoint():
+    """
+    Возвращает список всех зарегистрированных пользователей со статистикой переписки:
+    chat_id, username, first_name, last_message_time, message_count.
+    """
+    users = load_users()
+    user_list = []
+    for u in users:
+        chat_id = u["chat_id"]
+        messages = load_user_messages(chat_id)
+        last_time = messages[-1]["timestamp"] if messages else None
+        full_name = (u.get("full_name") or "").strip()
+        first_name = full_name.split()[0] if full_name else (u.get("username") or f"id:{chat_id}")
+        user_list.append({
+            "chat_id": chat_id,
+            "username": u.get("username"),
+            "first_name": first_name,
+            "full_name": full_name,
+            "last_message_time": last_time,
+            "message_count": len(messages)
+        })
+    # Сортируем: сначала активные пользователи с самыми свежими сообщениями
+    user_list.sort(key=lambda x: x["last_message_time"] or "", reverse=True)
+    return user_list
+
+@app.get("/api/users/{chat_id}/history")
+async def get_user_chat_history_endpoint(chat_id: int):
+    """
+    Возвращает полную хронологическую историю сообщений пользователя.
+    """
+    messages = load_user_messages(chat_id)
+    return {
+        "chat_id": chat_id,
+        "message_count": len(messages),
+        "messages": messages
+    }
+
+class DirectMessageRequest(BaseModel):
+    message: str
+
+@app.post("/api/users/{chat_id}/send")
+async def send_direct_message_endpoint(chat_id: int, req: DirectMessageRequest):
+    """
+    Отправляет прямое текстовое сообщение в Telegram конкретному пользователю
+    и сохраняет его в историю переписки.
+    """
+    text = req.message.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Текст сообщения не может быть пустым")
+
+    if not bot_instance or not BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Telegram-бот не запущен или BOT_TOKEN не настроен")
+
+    try:
+        await bot_instance.send_message(chat_id=chat_id, text=text)
+        # Сохраняем отправленное ботом сообщение в историю
+        append_user_message(chat_id=chat_id, role="bot", msg_type="text", text=text)
+        print(f"[Direct Message -> chat_id:{chat_id}] Sent: \"{text}\"")
+        return {"status": "success", "detail": "Сообщение успешно доставлено"}
+    except TelegramAPIError as e:
+        print(f"[Direct Message ERROR -> chat_id:{chat_id}] Telegram API error: {e.message}")
+        raise HTTPException(status_code=500, detail=f"Ошибка Telegram API: {e.message}")
+    except Exception as e:
+        print(f"[Direct Message ERROR -> chat_id:{chat_id}] Send error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/config")
 async def get_config_endpoint():

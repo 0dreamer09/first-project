@@ -167,6 +167,123 @@
       </div>
     </section>
 
+    <!-- User Dialogues & History Viewer Section -->
+    <section class="rounded-2xl bg-slate-900/70 border border-slate-800/80 p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-white">Диалоги пользователей</h2>
+            <p class="text-xs text-slate-400">Просмотр истории переписки и персональная отправка сообщений</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick="loadUsersList()"
+          class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700/70 text-xs font-medium text-slate-200 transition-all self-start sm:self-auto"
+        >
+          <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span>Обновить список</span>
+        </button>
+      </div>
+
+      <!-- Two-column grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Left Column: Users List -->
+        <div class="lg:col-span-4 flex flex-col space-y-3">
+          <div class="relative">
+            <input
+              type="text"
+              id="userSearchInput"
+              oninput="filterUsersList()"
+              placeholder="Поиск по имени или @username..."
+              class="w-full rounded-xl bg-slate-950/80 border border-slate-700/70 pl-9 pr-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/80 focus:border-sky-500 transition-all"
+            />
+            <svg class="w-4 h-4 text-slate-500 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+
+          <div id="usersListContainer" class="flex-1 max-h-[500px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            <!-- Список пользователей рендерится через JS -->
+          </div>
+          <div id="noUsersNotice" class="hidden text-center py-8 text-xs text-slate-500">
+            Пользователи не найдены
+          </div>
+        </div>
+
+        <!-- Right Column: Active Chat Window -->
+        <div class="lg:col-span-8 flex flex-col h-[520px] rounded-2xl bg-slate-950/70 border border-slate-800/80 overflow-hidden shadow-inner">
+          <!-- Chat Header -->
+          <div id="chatHeader" class="px-5 py-3.5 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between">
+            <div id="chatHeaderInfo" class="flex items-center space-x-3">
+              <div class="h-9 w-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs text-slate-400">
+                💬
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-slate-300">Выберите диалог</div>
+                <div class="text-[11px] text-slate-500">Нажмите на пользователя слева</div>
+              </div>
+            </div>
+
+            <div id="chatHeaderActions" class="hidden flex items-center space-x-2">
+              <button
+                type="button"
+                onclick="refreshActiveChat()"
+                title="Обновить диалог"
+                class="p-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition-all"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Messages Scroll Area -->
+          <div id="chatMessagesArea" class="flex-1 overflow-y-auto p-4 space-y-3.5">
+            <div class="h-full flex flex-col items-center justify-center text-center text-slate-500 text-sm">
+              <svg class="w-12 h-12 text-slate-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>
+              <span>Выберите пользователя из списка слева, чтобы просмотреть переписку</span>
+            </div>
+          </div>
+
+          <!-- Chat Input / Quick Send Box -->
+          <div id="chatInputArea" class="hidden p-3.5 border-t border-slate-800/80 bg-slate-900/60">
+            <form onsubmit="event.preventDefault(); sendDirectMessage();" class="flex items-center space-x-2">
+              <input
+                type="text"
+                id="directMessageInput"
+                placeholder="Быстрый ответ пользователю в Telegram..."
+                class="flex-1 rounded-xl bg-slate-950/80 border border-slate-700/70 px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/80 focus:border-sky-500 transition-all"
+                required
+              />
+              <button
+                type="submit"
+                id="directSendBtn"
+                class="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white text-xs font-medium shadow-md shadow-sky-600/20 transition-all disabled:opacity-50"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                </svg>
+                <span id="directSendBtnText">Отправить</span>
+              </button>
+            </form>
+            <div id="directSendToast" class="hidden text-xs mt-2 font-medium"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- AI Settings Card -->
     <section class="rounded-2xl bg-slate-900/70 border border-slate-800/80 p-6 shadow-sm">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -542,9 +659,249 @@
       }
     }
 
+    // ----------------- Пользователи и история переписки -----------------
+    let allUsersData = [];
+    let activeChatId = null;
+
+    async function loadUsersList() {
+      try {
+        const res = await fetch('/api/users');
+        if (!res.ok) return;
+        allUsersData = await res.json();
+        renderUsersList(allUsersData);
+      } catch (e) {
+        console.error('Ошибка загрузки пользователей:', e);
+      }
+    }
+
+    function filterUsersList() {
+      const query = (document.getElementById('userSearchInput')?.value || '').toLowerCase().trim();
+      if (!query) {
+        renderUsersList(allUsersData);
+        return;
+      }
+      const filtered = allUsersData.filter(u => 
+        (u.first_name && u.first_name.toLowerCase().includes(query)) ||
+        (u.full_name && u.full_name.toLowerCase().includes(query)) ||
+        (u.username && u.username.toLowerCase().includes(query)) ||
+        String(u.chat_id).includes(query)
+      );
+      renderUsersList(filtered);
+    }
+
+    function renderUsersList(users) {
+      const container = document.getElementById('usersListContainer');
+      const notice = document.getElementById('noUsersNotice');
+      if (!container) return;
+
+      if (!users || users.length === 0) {
+        container.innerHTML = '';
+        if (notice) notice.classList.remove('hidden');
+        return;
+      }
+      if (notice) notice.classList.add('hidden');
+
+      container.innerHTML = users.map(u => {
+        const isActive = activeChatId === u.chat_id;
+        const initial = (u.first_name || u.username || 'U')[0].toUpperCase();
+        const userTag = u.username ? `@${u.username}` : `id:${u.chat_id}`;
+        const timeDisplay = u.last_message_time ? (u.last_message_time.split(' ')[1]?.slice(0, 5) || u.last_message_time) : '—';
+        
+        return `
+          <div
+            onclick="selectUserChat(${u.chat_id})"
+            class="cursor-pointer p-3 rounded-xl border transition-all flex items-center justify-between ${
+              isActive 
+                ? 'bg-sky-500/15 border-sky-500/40 shadow-sm' 
+                : 'bg-slate-900/60 hover:bg-slate-800/60 border-slate-800/80'
+            }"
+          >
+            <div class="flex items-center space-x-3 overflow-hidden">
+              <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center font-bold text-white text-xs flex-shrink-0 shadow-sm">
+                ${initial}
+              </div>
+              <div class="truncate">
+                <div class="text-xs font-semibold text-white truncate">${u.first_name || u.full_name || userTag}</div>
+                <div class="text-[11px] text-slate-400 font-mono truncate">${userTag}</div>
+              </div>
+            </div>
+            <div class="text-right flex-shrink-0 ml-2">
+              <div class="text-[10px] text-slate-400 font-mono">${timeDisplay}</div>
+              <span class="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700/60">
+                ${u.message_count}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function selectUserChat(chatId) {
+      activeChatId = chatId;
+      renderUsersList(allUsersData);
+
+      const user = allUsersData.find(u => u.chat_id === chatId) || { chat_id: chatId };
+      const userTag = user.username ? `@${user.username}` : `id:${user.chat_id}`;
+      const userName = user.first_name || user.full_name || userTag;
+
+      const headerInfo = document.getElementById('chatHeaderInfo');
+      const headerActions = document.getElementById('chatHeaderActions');
+      const inputArea = document.getElementById('chatInputArea');
+
+      if (headerInfo) {
+        headerInfo.innerHTML = `
+          <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center font-bold text-white text-xs flex-shrink-0">
+            ${userName[0].toUpperCase()}
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">${userName}</div>
+            <div class="text-[11px] text-slate-400 font-mono">${userTag} &bull; <span class="text-slate-500">ID: ${chatId}</span></div>
+          </div>
+        `;
+      }
+      if (headerActions) headerActions.classList.remove('hidden');
+      if (inputArea) inputArea.classList.remove('hidden');
+
+      await loadChatHistory(chatId);
+    }
+
+    async function loadChatHistory(chatId) {
+      const area = document.getElementById('chatMessagesArea');
+      if (!area) return;
+
+      try {
+        const res = await fetch(`/api/users/${chatId}/history`);
+        if (!res.ok) {
+          area.innerHTML = '<div class="py-10 text-center text-xs text-rose-400">Ошибка загрузки сообщений</div>';
+          return;
+        }
+        const data = await res.json();
+        const messages = data.messages || [];
+
+        if (messages.length === 0) {
+          area.innerHTML = `
+            <div class="h-full flex flex-col items-center justify-center text-center text-slate-500 text-xs">
+              <svg class="w-10 h-10 text-slate-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>
+              В этом чате пока нет сохранённых сообщений
+            </div>
+          `;
+          return;
+        }
+
+        area.innerHTML = messages.map(m => {
+          const isUser = m.role === 'user';
+          const isVoice = m.type === 'voice';
+          const timeStr = m.timestamp ? (m.timestamp.split(' ')[1] || m.timestamp) : '';
+
+          if (isUser) {
+            return `
+              <div class="flex justify-end">
+                <div class="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-tr-xs bg-indigo-600 px-4 py-2.5 text-white shadow-md">
+                  ${isVoice ? `
+                    <div class="flex items-center space-x-1.5 text-amber-300 text-[11px] font-semibold mb-1 pb-1 border-b border-indigo-500/50">
+                      <span>🎤</span><span>Голосовое сообщение</span>
+                    </div>
+                  ` : ''}
+                  <div class="text-xs leading-relaxed break-words whitespace-pre-wrap">${escapeHtml(m.text)}</div>
+                  <div class="text-[10px] text-indigo-200/70 text-right mt-1 font-mono">${timeStr}</div>
+                </div>
+              </div>
+            `;
+          } else {
+            return `
+              <div class="flex justify-start">
+                <div class="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-tl-xs bg-slate-800/90 border border-slate-700/60 px-4 py-2.5 text-slate-100 shadow-sm">
+                  <div class="flex items-center space-x-1 text-sky-400 text-[11px] font-semibold mb-1 pb-1 border-b border-slate-700/40">
+                    <span>🤖</span><span>Ассистент</span>
+                  </div>
+                  <div class="text-xs leading-relaxed break-words whitespace-pre-wrap">${escapeHtml(m.text)}</div>
+                  <div class="text-[10px] text-slate-400 text-right mt-1 font-mono">${timeStr}</div>
+                </div>
+              </div>
+            `;
+          }
+        }).join('');
+
+        // Прокручиваем к последнему сообщению
+        area.scrollTop = area.scrollHeight;
+
+      } catch (e) {
+        console.error('Ошибка загрузки истории сообщений:', e);
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    async function refreshActiveChat() {
+      if (activeChatId) {
+        await loadChatHistory(activeChatId);
+      }
+      await loadUsersList();
+    }
+
+    async function sendDirectMessage() {
+      if (!activeChatId) return;
+      const input = document.getElementById('directMessageInput');
+      const btn = document.getElementById('directSendBtn');
+      const btnText = document.getElementById('directSendBtnText');
+      const toast = document.getElementById('directSendToast');
+      const text = (input?.value || '').trim();
+
+      if (!text) return;
+
+      btn.disabled = true;
+      btnText.innerText = '...';
+
+      try {
+        const res = await fetch(`/api/users/${activeChatId}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+          input.value = '';
+          if (toast) {
+            toast.className = 'text-xs mt-1.5 text-emerald-400 font-medium';
+            toast.innerText = '✓ Сообщение доставлено пользователю';
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+          }
+          await refreshActiveChat();
+        } else {
+          if (toast) {
+            toast.className = 'text-xs mt-1.5 text-rose-400 font-medium';
+            toast.innerText = `Ошибка: ${data.detail || 'Не удалось отправить'}`;
+            toast.classList.remove('hidden');
+          }
+        }
+      } catch (e) {
+        if (toast) {
+          toast.className = 'text-xs mt-1.5 text-rose-400 font-medium';
+          toast.innerText = 'Ошибка соединения с сервером';
+          toast.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btnText.innerText = 'Отправить';
+      }
+    }
+
     // Инициализация при загрузке страницы
     loadAiConfig();
     updateStats();
+    loadUsersList();
     setInterval(updateStats, 3500);
   </script>
 </body>
