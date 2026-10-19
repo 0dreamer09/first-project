@@ -45,6 +45,19 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 bot_instance: Optional[Bot] = None
 gemini_client: Optional[genai.Client] = None
 user_histories: Dict[int, List[genai_types.Content]] = {}
+MAX_HISTORY_MESSAGES = 10  # Хранение последних 10 сообщений (5 раундов диалога: user + model)
+
+def get_user_history(chat_id: int) -> List[genai_types.Content]:
+    """
+    Возвращает накопленную историю диалога пользователя (до MAX_HISTORY_MESSAGES = 10).
+    Гарантирует валидность структуры для Gemini API (история всегда начинается с role='user').
+    """
+    raw_history = user_histories.get(chat_id, [])
+    trimmed = list(raw_history[-MAX_HISTORY_MESSAGES:])
+    while trimmed and trimmed[0].role != "user":
+        trimmed.pop(0)
+    return trimmed
+
 
 # ----------------- Работа с конфигурацией AI (config.json) -----------------
 
@@ -195,8 +208,8 @@ async def generate_and_stream_response(
     # Цепочка опроса: приоритетная модель первой, затем запасные
     models_chain = [primary_model] + [m for m in configured_fallbacks if m != primary_model]
 
-    # Подготавливаем историю диалога для контекста
-    history = user_histories.get(chat_id, [])
+    # Подготавливаем историю диалога для контекста (до 10 сообщений / 5 раундов)
+    history = get_user_history(chat_id)
     request_contents = list(history) + [
         genai_types.Content(
             role="user",
@@ -211,7 +224,7 @@ async def generate_and_stream_response(
         next_model = models_chain[idx + 1] if idx + 1 < total_models else None
 
         try:
-            print(f"[Gemini -> {user_tag}] Запрос к модели '{model_name}' (попытка {idx + 1}/{total_models}, таймаут 6s)...")
+            print(f"[Gemini -> {user_tag}] Requesting model '{model_name}' (attempt {idx + 1}/{total_models}, timeout 6s, context: {len(history)} msgs)...")
             
             # Запускаем стриминг с жестким таймаутом 6.0 секунд на получение первого ответа
             stream = await asyncio.wait_for(
@@ -266,7 +279,7 @@ async def generate_and_stream_response(
             try:
                 await status_msg.edit_text(final_html, parse_mode=ParseMode.HTML)
             except (TelegramBadRequest, TelegramAPIError) as e:
-                print(f"[Warning] Ошибка парсинга Telegram HTML ({e}), отправка чистым текстом...")
+                print(f"[Warning] Failed to parse Telegram HTML ({e}), sending plain text...")
                 plain_final = accumulated_text
                 if is_fallback:
                     plain_final += f"\n\n(Резервная модель: {model_name})"
@@ -275,18 +288,19 @@ async def generate_and_stream_response(
                 except TelegramAPIError:
                     pass
 
-            # Сохраняем диалог в истории
-            if chat_id not in user_histories:
-                user_histories[chat_id] = []
-            user_histories[chat_id].append(
-                genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=user_text)])
-            )
-            user_histories[chat_id].append(
-                genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=accumulated_text)])
-            )
-            user_histories[chat_id] = user_histories[chat_id][-20:]
+            # Сохраняем диалог в истории (до MAX_HISTORY_MESSAGES = 10 сообщений / 5 раундов)
+            if accumulated_text.strip():
+                if chat_id not in user_histories:
+                    user_histories[chat_id] = []
+                user_histories[chat_id].append(
+                    genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=user_text)])
+                )
+                user_histories[chat_id].append(
+                    genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=accumulated_text)])
+                )
+                user_histories[chat_id] = user_histories[chat_id][-MAX_HISTORY_MESSAGES:]
 
-            print(f"[Gemini OK -> {user_tag}] Ответ успешно доставлен от '{model_name}' ({len(accumulated_text)} симв.)")
+            print(f"[Gemini OK -> {user_tag}] Response delivered from '{model_name}' ({len(accumulated_text)} chars, stored history: {len(user_histories[chat_id])} msgs)")
             return True
 
         except (asyncio.TimeoutError, TimeoutError):
@@ -389,13 +403,17 @@ async def command_start_handler(message: types.Message):
         parse_mode=ParseMode.HTML
     )
 
-@dp.message(Command("reset"))
+@dp.message(Command("reset", "clear"))
 async def command_reset_handler(message: types.Message):
     chat_id = message.chat.id
-    if chat_id in user_histories:
-        user_histories.pop(chat_id, None)
-    print(f"[Бот /reset] История диалога очищена для chat_id: {chat_id}")
-    await message.answer("🔄 История диалога очищена. Можем начать общение с чистого листа!")
+    had_history = chat_id in user_histories and bool(user_histories[chat_id])
+    user_histories.pop(chat_id, None)
+    print(f"[Bot /reset] Conversation history completely cleared for chat_id: {chat_id} (had previous context: {had_history})")
+    await message.answer(
+        "🔄 <b>История диалога очищена.</b>\n"
+        "Контекст сброшен, можем начать общение с чистого листа!",
+        parse_mode=ParseMode.HTML
+    )
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def ai_message_handler(message: types.Message):
@@ -487,7 +505,7 @@ async def update_config_endpoint(req: ConfigUpdateRequest):
     
     # Сбрасываем историю диалогов при смене системной инструкции/модели
     user_histories.clear()
-    print(f"[Настройки AI] Конфигурация обновлена: модель={cfg.get('model')}, Fallback Chain={cfg.get('fallback_models')}")
+    print(f"[AI Config] Configuration updated: model={cfg.get('model')}, Fallback Chain={cfg.get('fallback_models')}, user history reset.")
 
     return {
         "status": "success",
@@ -557,12 +575,16 @@ async def handle_broadcast(req: BroadcastRequest):
     }
 
 async def run_bot(bot: Bot):
-    print("[Aiogram] Запуск Telegram-бота (polling)...")
+    print("[Aiogram] Starting Telegram bot (polling)...")
     try:
         await bot.delete_webhook(drop_pending_updates=True)
+        await bot.set_my_commands([
+            types.BotCommand(command="start", description="Запустить бота"),
+            types.BotCommand(command="reset", description="Очистить историю диалога"),
+        ])
         await dp.start_polling(bot)
     except Exception as e:
-        print(f"[Aiogram ERROR] Ошибка при работе бота: {e}", file=sys.stderr)
+        print(f"[Aiogram ERROR] Error running bot: {e}", file=sys.stderr)
 
 async def run_web():
     print(f"[FastAPI] Запуск веб-сервера на http://localhost:{WEB_PORT} ...")
